@@ -1,0 +1,161 @@
+
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your Cart — Dispatch</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+
+<header class="site">
+  <div class="container">
+    <a class="brand" href="/"><span class="mark"></span><div><strong>DISPATCH</strong><br><small>ADVANCED COMMERCE</small></div></a>
+    <nav class="main">
+      <a href="/">Catalog</a>
+      <a href="/cart/" aria-current="page">Cart</a>
+      <a href="/orders/">Orders</a>
+      <a href="/dashboard/">Admin</a>
+    </nav>
+    <div class="header-actions">
+      <a class="icon-link" href="/cart/">🧾 Cart <span class="cart-count" data-cart-count>0</span></a>
+      <span data-auth-slot></span>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <div class="section-head"><h2>Your cart</h2></div>
+  <div id="alertSlot"></div>
+
+  <div class="cart-layout" id="cartLayout" style="display:none">
+    <div>
+      <div id="cartItems"></div>
+      <div style="margin-top:20px">
+        <a class="btn secondary sm" href="/">← Continue shopping</a>
+      </div>
+    </div>
+    <div>
+      <div class="receipt">
+        <h4>Order Summary</h4>
+        <div class="line"><span>Subtotal</span><span id="sumSubtotal">$0.00</span></div>
+        <div class="line muted"><span>Estimated tax</span><span id="sumTax">$0.00</span></div>
+        <div class="line muted"><span>Dispatch fee</span><span id="sumShip">$0.00</span></div>
+        <div class="total"><span>Total</span><span id="sumTotal">$0.00</span></div>
+        <div class="barcode"></div>
+        <button class="btn amber block" id="checkoutBtn" style="margin-top:14px">Proceed to checkout</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="empty-state" id="emptyState" style="display:none">
+    <div class="glyph">🧾</div>
+    <h3>Your cart is empty</h3>
+    <p>Items you add will show up here, ready for dispatch.</p>
+    <a class="btn amber" href="/">Browse the catalog</a>
+  </div>
+</main>
+
+<footer class="site"><div class="container"><span>© 2026 Dispatch Commerce Co.</span></div></footer>
+
+<script src="{% static 'js/api.js' %}"></script>
+<script>
+let cartData = null;
+
+function itemsOf(cart){ return cart.items || cart.cartItems || cart.data?.items || []; }
+function itemProduct(it){ return it.product || it; }
+function itemQty(it){ return it.quantity || it.qty || 1; }
+function itemPrice(it){ const p = itemProduct(it); return it.price ?? p.price ?? 0; }
+function itemId(it){ return it._id || it.id; }
+
+async function loadCart(){
+  if (!Auth.isLoggedIn()){
+    qs("#alertSlot").innerHTML = `<div class="alert info">You need to <a href="/login/" style="border-bottom:1.5px solid var(--ink)">log in</a> to view your cart.</div>`;
+    qs("#emptyState").style.display = "block";
+    return;
+  }
+  try {
+    const res = await Api.getCart();
+    cartData = res.data || res.cart || res;
+    const items = itemsOf(cartData);
+    if (!items.length){
+      qs("#emptyState").style.display = "block";
+      qs("#cartLayout").style.display = "none";
+      return;
+    }
+    qs("#emptyState").style.display = "none";
+    qs("#cartLayout").style.display = "grid";
+    renderItems(items);
+    renderSummary(items, cartData);
+  } catch (e) {
+    qs("#alertSlot").innerHTML = `<div class="alert error">Couldn't load your cart: ${e.message}</div>`;
+  }
+}
+
+function renderItems(items){
+  qs("#cartItems").innerHTML = items.map(it => {
+    const p = itemProduct(it);
+    const img = (p.images && p.images[0]) || p.imageCover || p.image || "";
+    return `
+    <div class="cart-item" data-item="${itemId(it)}">
+      <div class="thumb">${img ? `<img src="${img}">` : "🗃️"}</div>
+      <div>
+        <div class="name">${p.name || p.title || "Item"}</div>
+        <div class="sku">SKU ${(p._id||p.id||"").toString().slice(-8).toUpperCase()}</div>
+        <a class="remove-link" data-remove="${itemId(it)}">Remove</a>
+      </div>
+      <div class="qty-stepper">
+        <button type="button" data-dec="${itemId(it)}">−</button>
+        <input value="${itemQty(it)}" data-qty="${itemId(it)}" inputmode="numeric">
+        <button type="button" data-inc="${itemId(it)}">+</button>
+      </div>
+      <div class="price">${money(itemPrice(it))}</div>
+      <div class="price">${money(itemPrice(it) * itemQty(it))}</div>
+    </div>`;
+  }).join("");
+
+  qsa("[data-remove]").forEach(el => el.addEventListener("click", () => changeQty(el.dataset.remove, 0, true)));
+  qsa("[data-inc]").forEach(el => el.addEventListener("click", () => bumpQty(el.dataset.inc, 1)));
+  qsa("[data-dec]").forEach(el => el.addEventListener("click", () => bumpQty(el.dataset.dec, -1)));
+}
+
+function bumpQty(id, delta){
+  const input = qs(`[data-qty="${id}"]`);
+  const next = Math.max(1, Number(input.value) + delta);
+  changeQty(id, next);
+}
+
+async function changeQty(id, qty, remove = false){
+  try {
+    if (remove || qty <= 0) {
+      await Api.removeCartItem(id);
+      toast("Item removed", "success");
+    } else {
+      await Api.updateCartItem(id, qty);
+    }
+    await loadCart();
+    refreshHeaderState();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+function renderSummary(items, cart){
+  const subtotal = cart.subtotal ?? cart.totalPrice ?? items.reduce((s, it) => s + itemPrice(it) * itemQty(it), 0);
+  const tax = cart.tax ?? subtotal * 0.08;
+  const shipping = subtotal > 75 || subtotal === 0 ? 0 : 6.5;
+  const total = cart.total ?? (subtotal + tax + shipping);
+  qs("#sumSubtotal").textContent = money(subtotal);
+  qs("#sumTax").textContent = money(tax);
+  qs("#sumShip").textContent = shipping === 0 ? "FREE" : money(shipping);
+  qs("#sumTotal").textContent = money(total);
+}
+
+qs("#checkoutBtn").addEventListener("click", () => location.href = "/checkout/");
+
+loadCart();
+</script>
+</body>
+</html>

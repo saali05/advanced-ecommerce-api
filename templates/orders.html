@@ -1,0 +1,98 @@
+
+
+
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your Orders — Dispatch</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+
+<header class="site">
+  <div class="container">
+    <a class="brand" href="/"><span class="mark"></span><div><strong>DISPATCH</strong><br><small>ADVANCED COMMERCE</small></div></a>
+    <nav class="main"><a href="/">Catalog</a><a href="/cart/">Cart</a><a href="/orders/" aria-current="page">Orders</a></nav>
+    <div class="header-actions">
+      <a class="icon-link" href="/cart/">🧾 Cart <span class="cart-count" data-cart-count>0</span></a>
+      <span data-auth-slot></span>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <div class="profile-layout">
+    <nav class="side-nav">
+      <a href="/profile/">Profile</a>
+      <a href="/orders/" aria-current="page">Order history</a>
+      <a href="/cart/">Cart</a>
+    </nav>
+    <div>
+      <div class="section-head"><h2>Order history</h2></div>
+      <div id="alertSlot"></div>
+      <div id="ordersList"></div>
+    </div>
+  </div>
+</main>
+
+<footer class="site"><div class="container"><span>© 2026 Dispatch Commerce Co.</span></div></footer>
+
+<script src="{% static 'js/api.js' %}"></script>
+<script>
+const STEPS = ["pending", "processing", "dispatched", "delivered"];
+
+function statusIndex(status){
+  const s = (status || "pending").toLowerCase();
+  const idx = STEPS.indexOf(s);
+  return idx === -1 ? 0 : idx;
+}
+
+function orderItems(o){ return o.items || o.orderItems || o.cartItems || []; }
+
+async function loadOrders(){
+  if (!Auth.isLoggedIn()){
+    qs("#alertSlot").innerHTML = `<div class="alert info">Please <a href="/login/" style="border-bottom:1.5px solid var(--ink)">log in</a> to view your orders.</div>`;
+    return;
+  }
+  try {
+    const res = await Api.getOrders();
+    const orders = res.data || res.orders || res || [];
+    if (!orders.length){
+      qs("#ordersList").innerHTML = `<div class="empty-state"><div class="glyph">📄</div><h3>No orders yet</h3><p>Once you place an order it'll show up here with live status.</p><a class="btn amber" href="/">Start shopping</a></div>`;
+      return;
+    }
+    qs("#ordersList").innerHTML = orders.map(o => {
+      const idx = statusIndex(o.status || o.orderStatus);
+      const items = orderItems(o);
+      return `
+      <div class="order-row">
+        <div class="head">
+          <span>ORDER #${(o._id||o.id||"").toString().slice(-8).toUpperCase()}</span>
+          <span>${new Date(o.createdAt || Date.now()).toLocaleDateString()}</span>
+          <span class="badge ${idx===3?'green':idx===0?'ghost':'amber'}">${(o.status||o.orderStatus||"pending")}</span>
+          <span class="price">${money(o.total || o.totalPrice || 0)}</span>
+        </div>
+        <div class="body">
+          ${items.map(it => `<img src="${(it.product?.images?.[0])||it.image||''}" alt="">`).join("") || `<span class="mono" style="font-size:12px;color:var(--ink-soft)">${items.length} item(s)</span>`}
+        </div>
+        <div class="status-track">
+          ${STEPS.map((s,i) => `<div class="${i<=idx?'done':''}">${s}</div>`).join("")}
+        </div>
+        <div style="padding:12px 18px"><a class="btn secondary sm" href="/orders/?id=${o._id||o.id}">View details</a></div>
+      </div>`;
+    }).join("");
+  } catch (e) {
+    qs("#alertSlot").innerHTML = `<div class="alert error">Couldn't load orders: ${e.message}</div>`;
+  }
+}
+
+loadOrders();
+</script>
+</body>
+</html>
+

@@ -10,6 +10,7 @@ from categories.models import Category
 from products.models import Product
 from orders.models import Order, OrderStatus
 
+from django.shortcuts import render
 
 class DashboardAPIView(APIView):
 
@@ -80,3 +81,27 @@ class DashboardAPIView(APIView):
             "revenue": revenue,
 
         })
+    
+def dashboard(request):
+
+    context={
+
+        "products":Product.objects.count(),
+
+        "categories":Category.objects.count(),
+
+        "orders":Order.objects.count(),
+
+        "customers":User.objects.filter(role="CUSTOMER").count(),
+
+    }
+
+    return render(
+
+        request,
+
+        "dashboard/dashboard.html",
+
+        context,
+
+    )

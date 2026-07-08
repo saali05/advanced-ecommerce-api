@@ -1,0 +1,168 @@
+
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Checkout — Dispatch</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<header class="site">
+  <div class="container">
+    <a class="brand" href="/"><span class="mark"></span><div><strong>DISPATCH</strong><br><small>ADVANCED COMMERCE</small></div></a>
+    <nav class="main"><a href="/">Catalog</a><a href="/cart/">Cart</a><a href="/orders/">Orders</a></nav>
+    <div class="header-actions"><span data-auth-slot></span></div>
+  </div>
+</header>
+
+<main class="container">
+  <div class="section-head"><h2>Checkout</h2></div>
+  <div id="alertSlot"></div>
+
+  <div class="steps">
+    <span class="active">1. Shipping</span>
+    <span class="active">2. Payment</span>
+    <span>3. Confirmation</span>
+  </div>
+
+  <div class="checkout-layout">
+    <div>
+      <div class="panel">
+        <h3 style="font-family:var(--mono);font-size:14px;margin-top:0">Shipping address</h3>
+        <div class="form-grid">
+          <div class="form-row"><label>Full name</label><input id="fullName" placeholder="Jordan Rivera"></div>
+          <div class="form-row"><label>Phone</label><input id="phone" placeholder="+1 555 010 2938"></div>
+        </div>
+        <div class="form-row"><label>Street address</label><input id="street" placeholder="1200 Warehouse Way"></div>
+        <div class="form-grid">
+          <div class="form-row"><label>City</label><input id="city" placeholder="Portland"></div>
+          <div class="form-row"><label>Postal code</label><input id="postal" placeholder="97201"></div>
+        </div>
+        <div class="form-grid">
+          <div class="form-row"><label>State / Region</label><input id="stateField" placeholder="OR"></div>
+          <div class="form-row"><label>Country</label><input id="country" placeholder="United States"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 style="font-family:var(--mono);font-size:14px;margin-top:0">Payment method</h3>
+        <div class="pay-options">
+          <label class="pay-option selected" data-pay="card"><input type="radio" name="pay" value="card" checked hidden> 💳 Card</label>
+          <label class="pay-option" data-pay="cod"><input type="radio" name="pay" value="cod" hidden> 💵 Cash on dispatch</label>
+        </div>
+        <div id="cardFields" style="margin-top:18px">
+          <div class="form-row"><label>Card number</label><input id="cardNumber" placeholder="4242 4242 4242 4242"></div>
+          <div class="form-grid">
+            <div class="form-row"><label>Expiry</label><input id="cardExp" placeholder="MM/YY"></div>
+            <div class="form-row"><label>CVC</label><input id="cardCvc" placeholder="123"></div>
+          </div>
+        </div>
+        <p class="form-note">Payment fields are illustrative only — wire this to your actual payment processor (e.g. Stripe Elements) before going live.</p>
+      </div>
+
+      <div class="form-error" id="checkoutError"></div>
+    </div>
+
+    <div>
+      <div class="receipt">
+        <h4>Order Preview</h4>
+        <div id="previewItems"></div>
+        <div class="line"><span>Subtotal</span><span id="pvSubtotal">$0.00</span></div>
+        <div class="line muted"><span>Tax</span><span id="pvTax">$0.00</span></div>
+        <div class="line muted"><span>Dispatch</span><span id="pvShip">$0.00</span></div>
+        <div class="total"><span>Total due</span><span id="pvTotal">$0.00</span></div>
+        <div class="barcode"></div>
+        <button class="btn amber block" id="placeOrderBtn" style="margin-top:14px">Place order</button>
+        <div class="stamp">ORDERS ARE FULFILLED WITHIN 24H</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="site"><div class="container"><span>© 2026 Dispatch Commerce Co.</span></div></footer>
+
+<script src="../js/api.js"></script>
+<script>
+let cartSnapshot = null;
+
+function itemsOf(cart){ return cart.items || cart.cartItems || cart.data?.items || []; }
+function itemProduct(it){ return it.product || it; }
+function itemQty(it){ return it.quantity || it.qty || 1; }
+function itemPrice(it){ const p = itemProduct(it); return it.price ?? p.price ?? 0; }
+
+async function loadPreview(){
+  if (!Auth.isLoggedIn()){
+    qs("#alertSlot").innerHTML = `<div class="alert info">Please <a href="/login/" style="border-bottom:1.5px solid var(--ink)">log in</a> to checkout.</div>`;
+    qs("#placeOrderBtn").disabled = true;
+    return;
+  }
+  try {
+    const res = await Api.getCart();
+    cartSnapshot = res.data || res.cart || res;
+    const items = itemsOf(cartSnapshot);
+    if (!items.length){
+      qs("#alertSlot").innerHTML = `<div class="alert info">Your cart is empty. <a href="/" style="border-bottom:1.5px solid var(--ink)">Go shopping →</a></div>`;
+      qs("#placeOrderBtn").disabled = true;
+      return;
+    }
+    qs("#previewItems").innerHTML = items.map(it => {
+      const p = itemProduct(it);
+      return `<div class="line"><span>${itemQty(it)}× ${p.name||p.title}</span><span>${money(itemPrice(it)*itemQty(it))}</span></div>`;
+    }).join("");
+    const subtotal = cartSnapshot.subtotal ?? cartSnapshot.totalPrice ?? items.reduce((s,it)=>s+itemPrice(it)*itemQty(it),0);
+    const tax = subtotal * 0.08;
+    const shipping = subtotal > 75 ? 0 : 6.5;
+    const total = subtotal + tax + shipping;
+    qs("#pvSubtotal").textContent = money(subtotal);
+    qs("#pvTax").textContent = money(tax);
+    qs("#pvShip").textContent = shipping === 0 ? "FREE" : money(shipping);
+    qs("#pvTotal").textContent = money(total);
+  } catch (e) {
+    qs("#alertSlot").innerHTML = `<div class="alert error">Couldn't load your cart: ${e.message}</div>`;
+  }
+}
+
+qsa(".pay-option").forEach(opt => opt.addEventListener("click", () => {
+  qsa(".pay-option").forEach(o => o.classList.remove("selected"));
+  opt.classList.add("selected");
+  opt.querySelector("input").checked = true;
+  qs("#cardFields").style.display = opt.dataset.pay === "card" ? "block" : "none";
+}));
+
+qs("#placeOrderBtn").addEventListener("click", async () => {
+  qs("#checkoutError").textContent = "";
+  const required = { fullName: qs("#fullName").value, street: qs("#street").value, city: qs("#city").value, postal: qs("#postal").value, country: qs("#country").value };
+  const missing = Object.entries(required).filter(([,v]) => !v.trim());
+  if (missing.length){ qs("#checkoutError").textContent = "Please fill in all shipping fields."; return; }
+
+  const payload = {
+    shippingAddress: {
+      fullName: required.fullName, phone: qs("#phone").value, street: required.street,
+      city: required.city, postalCode: required.postal, state: qs("#stateField").value, country: required.country,
+    },
+    paymentMethod: qs('input[name="pay"]:checked').value,
+  };
+
+  const btn = qs("#placeOrderBtn");
+  btn.disabled = true; btn.textContent = "Placing order…";
+  try {
+    const res = await Api.createOrder(payload);
+    const order = res.data || res.order || res;
+    toast("Order placed", "success");
+    refreshHeaderState();
+    location.href = `/orders/?id=${order._id || order.id || ""}`;
+  } catch (e) {
+    qs("#checkoutError").textContent = e.message;
+    btn.disabled = false; btn.textContent = "Place order";
+  }
+});
+
+loadPreview();
+</script>
+</body>
+</html>

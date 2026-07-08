@@ -1,0 +1,272 @@
+
+
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Dispatch</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+
+<header class="site">
+  <div class="container">
+    <a class="brand" href="/"><span class="mark"></span><div><strong>DISPATCH</strong><br><small>ADMIN CONSOLE</small></div></a>
+    <nav class="main"><a href="/">← Back to storefront</a></nav>
+    <div class="header-actions"><span data-auth-slot></span></div>
+  </div>
+</header>
+
+<div id="guardAlert" class="container" style="padding-top:20px"></div>
+
+<div class="admin-shell" id="adminShell" style="display:none">
+  <aside class="admin-sidebar">
+    <div class="brand-mini"><span class="mark" style="width:10px;height:10px;background:var(--amber)"></span> DISPATCH / ADMIN</div>
+    <nav>
+      <a href="#overview" class="nav-tab active" data-panel="overview">Overview</a>
+      <a href="#products" class="nav-tab" data-panel="products">Products</a>
+      <a href="#orders" class="nav-tab" data-panel="orders">Orders</a>
+      <a href="#users" class="nav-tab" data-panel="users">Users</a>
+    </nav>
+  </aside>
+
+  <main class="admin-main">
+    <section id="panel-overview" class="admin-panel">
+      <div class="section-head" style="margin-top:0"><h2>Overview</h2></div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="eyebrow">Revenue (30d)</div><div class="value" id="statRevenue">—</div><div class="delta up">API: /admin/stats</div></div>
+        <div class="stat-card"><div class="eyebrow">Orders</div><div class="value" id="statOrders">—</div></div>
+        <div class="stat-card"><div class="eyebrow">Products</div><div class="value" id="statProducts">—</div></div>
+        <div class="stat-card"><div class="eyebrow">Customers</div><div class="value" id="statUsers">—</div></div>
+      </div>
+      <div class="panel">
+        <h3 style="font-family:var(--mono);font-size:14px;margin-top:0">Recent orders</h3>
+        <table class="data" id="recentOrdersTable">
+          <thead><tr><th>Order</th><th>Customer</th><th>Status</th><th>Total</th><th>Date</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="panel-products" class="admin-panel" style="display:none">
+      <div class="table-toolbar">
+        <h2 style="font-family:var(--mono);font-size:20px;margin:0">Products</h2>
+        <button class="btn amber sm" id="newProductBtn">+ New product</button>
+      </div>
+      <table class="data">
+        <thead><tr><th></th><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Actions</th></tr></thead>
+        <tbody id="productsTbody"><tr><td colspan="6" class="mono">Loading…</td></tr></tbody>
+      </table>
+    </section>
+
+    <section id="panel-orders" class="admin-panel" style="display:none">
+      <div class="section-head" style="margin-top:0"><h2>Orders</h2></div>
+      <table class="data">
+        <thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Total</th><th>Status</th><th>Update</th></tr></thead>
+        <tbody id="ordersTbody"><tr><td colspan="6" class="mono">Loading…</td></tr></tbody>
+      </table>
+    </section>
+
+    <section id="panel-users" class="admin-panel" style="display:none">
+      <div class="section-head" style="margin-top:0"><h2>Users</h2></div>
+      <table class="data">
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th></tr></thead>
+        <tbody id="usersTbody"><tr><td colspan="4" class="mono">Loading…</td></tr></tbody>
+      </table>
+    </section>
+  </main>
+</div>
+
+<!-- product modal -->
+<div class="modal-backdrop" id="productModal">
+  <div class="modal">
+    <div class="modal-head"><h3 id="modalTitle">New product</h3><button class="close-x" data-close>&times;</button></div>
+    <form id="productForm">
+      <input type="hidden" id="productId">
+      <div class="form-row"><label>Name</label><input id="fName" required></div>
+      <div class="form-grid">
+        <div class="form-row"><label>Price ($)</label><input id="fPrice" type="number" step="0.01" required></div>
+        <div class="form-row"><label>Stock quantity</label><input id="fStock" type="number" required></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-row"><label>Category</label><input id="fCategory" placeholder="e.g. Hardware"></div>
+        <div class="form-row"><label>Image URL</label><input id="fImage" placeholder="https://…"></div>
+      </div>
+      <div class="form-row"><label>Description</label><textarea id="fDesc" rows="3"></textarea></div>
+      <div class="form-error" id="productFormError"></div>
+      <div style="display:flex;gap:10px;margin-top:6px">
+        <button class="btn amber" type="submit">Save product</button>
+        <button class="btn secondary" type="button" data-close>Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="{% static 'js/api.js' %}"></script>
+<script>
+async function guardAdmin(){
+  if (!Auth.isLoggedIn()){
+    qs("#guardAlert").innerHTML = `<div class="alert info">Please <a href="/login/" style="border-bottom:1.5px solid var(--ink)">log in as an admin</a> to view this console.</div>`;
+    return false;
+  }
+  if (!Auth.isAdmin()){
+    qs("#guardAlert").innerHTML = `<div class="alert error">Your account doesn't have admin access.</div>`;
+    return false;
+  }
+  qs("#adminShell").style.display = "grid";
+  return true;
+}
+
+qsa(".nav-tab").forEach(tab => tab.addEventListener("click", (e) => {
+  e.preventDefault();
+  qsa(".nav-tab").forEach(t => t.removeAttribute("aria-current"));
+  tab.setAttribute("aria-current", "page");
+  qsa(".admin-panel").forEach(p => p.style.display = "none");
+  qs(`#panel-${tab.dataset.panel}`).style.display = "block";
+  if (tab.dataset.panel === "products") loadProducts();
+  if (tab.dataset.panel === "orders") loadOrders();
+  if (tab.dataset.panel === "users") loadUsers();
+}));
+
+async function loadStats(){
+  try {
+    const res = await Api.getStats();
+    const s = res.data || res;
+    qs("#statRevenue").textContent = money(s.revenue || s.totalRevenue || 0);
+    qs("#statOrders").textContent = s.orders ?? s.totalOrders ?? "—";
+    qs("#statProducts").textContent = s.products ?? s.totalProducts ?? "—";
+    qs("#statUsers").textContent = s.users ?? s.totalUsers ?? "—";
+  } catch (e) {
+    qs("#statRevenue").textContent = "n/a";
+  }
+  try {
+    const res = await Api.adminGetOrders({ limit: 5, sort: "-createdAt" });
+    const orders = res.data || res.orders || [];
+    qs("#recentOrdersTable tbody").innerHTML = orders.map(o => `
+      <tr>
+        <td class="mono">#${(o._id||o.id||"").toString().slice(-6).toUpperCase()}</td>
+        <td>${o.user?.name || o.customerName || "—"}</td>
+        <td><span class="badge amber">${o.status || o.orderStatus || "pending"}</span></td>
+        <td class="mono">${money(o.total || o.totalPrice || 0)}</td>
+        <td class="mono">${new Date(o.createdAt||Date.now()).toLocaleDateString()}</td>
+      </tr>`).join("") || `<tr><td colspan="5">No orders yet.</td></tr>`;
+  } catch (e) {
+    qs("#recentOrdersTable tbody").innerHTML = `<tr><td colspan="5">Couldn't load recent orders.</td></tr>`;
+  }
+}
+
+async function loadProducts(){
+  const tbody = qs("#productsTbody");
+  try {
+    const res = await Api.adminGetProducts({ limit: 50 });
+    const products = res.data || res.products || [];
+    tbody.innerHTML = products.map(p => `
+      <tr>
+        <td>${(p.images&&p.images[0])||p.imageCover ? `<img src="${(p.images&&p.images[0])||p.imageCover}">` : "🗃️"}</td>
+        <td>${p.name || p.title}</td>
+        <td>${(p.category&&(p.category.name||p.category))||"—"}</td>
+        <td class="mono">${money(p.price)}</td>
+        <td class="mono">${p.quantity ?? p.stock ?? 0}</td>
+        <td class="table-actions">
+          <button class="icon-btn" title="Edit" data-edit='${JSON.stringify(p).replace(/'/g,"&apos;")}'>✎</button>
+          <button class="icon-btn danger" title="Delete" data-delete="${p._id||p.id}">🗑</button>
+        </td>
+      </tr>`).join("") || `<tr><td colspan="6">No products yet — add one to get started.</td></tr>`;
+
+    qsa("[data-edit]").forEach(btn => btn.addEventListener("click", () => openProductModal(JSON.parse(btn.dataset.edit.replace(/&apos;/g,"'")))));
+    qsa("[data-delete]").forEach(btn => btn.addEventListener("click", () => deleteProduct(btn.dataset.delete)));
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6">Couldn't load products: ${e.message}</td></tr>`;
+  }
+}
+
+function openProductModal(p){
+  qs("#modalTitle").textContent = p ? "Edit product" : "New product";
+  qs("#productId").value = p?._id || p?.id || "";
+  qs("#fName").value = p?.name || p?.title || "";
+  qs("#fPrice").value = p?.price || "";
+  qs("#fStock").value = p?.quantity ?? p?.stock ?? "";
+  qs("#fCategory").value = (p?.category && (p.category.name || p.category)) || "";
+  qs("#fImage").value = (p?.images && p.images[0]) || p?.imageCover || "";
+  qs("#fDesc").value = p?.description || "";
+  qs("#productFormError").textContent = "";
+  qs("#productModal").classList.add("open");
+}
+qs("#newProductBtn").addEventListener("click", () => openProductModal(null));
+qsa("[data-close]").forEach(el => el.addEventListener("click", () => qs("#productModal").classList.remove("open")));
+
+qs("#productForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = qs("#productId").value;
+  const payload = {
+    name: qs("#fName").value,
+    price: Number(qs("#fPrice").value),
+    quantity: Number(qs("#fStock").value),
+    category: qs("#fCategory").value,
+    images: qs("#fImage").value ? [qs("#fImage").value] : [],
+    description: qs("#fDesc").value,
+  };
+  try {
+    if (id) await Api.adminUpdateProduct(id, payload);
+    else await Api.adminCreateProduct(payload);
+    toast(id ? "Product updated" : "Product created", "success");
+    qs("#productModal").classList.remove("open");
+    loadProducts();
+  } catch (err) { qs("#productFormError").textContent = err.message; }
+});
+
+async function deleteProduct(id){
+  if (!confirm("Delete this product? This can't be undone.")) return;
+  try { await Api.adminDeleteProduct(id); toast("Product deleted", "success"); loadProducts(); }
+  catch (e) { toast(e.message, "error"); }
+}
+
+async function loadOrders(){
+  const tbody = qs("#ordersTbody");
+  try {
+    const res = await Api.adminGetOrders({ limit: 50 });
+    const orders = res.data || res.orders || [];
+    tbody.innerHTML = orders.map(o => `
+      <tr>
+        <td class="mono">#${(o._id||o.id||"").toString().slice(-6).toUpperCase()}</td>
+        <td>${o.user?.name || o.customerName || "—"}</td>
+        <td>${(o.items||o.orderItems||[]).length} item(s)</td>
+        <td class="mono">${money(o.total||o.totalPrice||0)}</td>
+        <td><span class="badge amber">${o.status||o.orderStatus||"pending"}</span></td>
+        <td>
+          <select data-status="${o._id||o.id}">
+            ${["pending","processing","dispatched","delivered","cancelled"].map(s => `<option ${s===(o.status||o.orderStatus)?"selected":""}>${s}</option>`).join("")}
+          </select>
+        </td>
+      </tr>`).join("") || `<tr><td colspan="6">No orders yet.</td></tr>`;
+
+    qsa("[data-status]").forEach(sel => sel.addEventListener("change", async () => {
+      try { await Api.adminUpdateOrderStatus(sel.dataset.status, sel.value); toast("Order status updated", "success"); }
+      catch (e) { toast(e.message, "error"); }
+    }));
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6">Couldn't load orders: ${e.message}</td></tr>`;
+  }
+}
+
+async function loadUsers(){
+  const tbody = qs("#usersTbody");
+  try {
+    const res = await Api.adminGetUsers({ limit: 50 });
+    const users = res.data || res.users || [];
+    tbody.innerHTML = users.map(u => `
+      <tr><td>${u.name}</td><td class="mono">${u.email}</td><td><span class="badge ${u.role==='admin'?'amber':'ghost'}">${u.role||"user"}</span></td><td class="mono">${new Date(u.createdAt||Date.now()).toLocaleDateString()}</td></tr>
+    `).join("") || `<tr><td colspan="4">No users found.</td></tr>`;
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="4">Couldn't load users: ${e.message}</td></tr>`;
+  }
+}
+
+(async () => { if (await guardAdmin()) loadStats(); })();
+</script>
+</body>
+</html>

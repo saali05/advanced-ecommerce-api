@@ -1,0 +1,212 @@
+
+
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Product — Dispatch</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+
+<header class="site">
+  <div class="container">
+    <a class="brand" href="/"><span class="mark"></span><div><strong>DISPATCH</strong><br><small>ADVANCED COMMERCE</small></div></a>
+    <nav class="main">
+      <a href="/">Catalog</a>
+      <a href="/cart/">Cart</a>
+      <a href="/orders/">Orders</a>
+      <a href="/admin/">Admin</a>
+    </nav>
+    <div class="header-actions">
+      <a class="icon-link" href="/cart/">🧾 Cart <span class="cart-count" data-cart-count>0</span></a>
+      <span data-auth-slot></span>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <div id="alertSlot"></div>
+  <div class="pdp" id="pdp">
+    <div>
+      <div class="gallery-main skeleton" id="mainImage" style="min-height:400px"></div>
+      <div class="thumbs" id="thumbRow"></div>
+    </div>
+    <div>
+      <span class="eyebrow" id="pCategory">Loading…</span>
+      <h1 id="pName">&nbsp;</h1>
+      <div class="price" id="pPrice"></div>
+      <div id="pStock"></div>
+      <p class="desc" id="pDesc"></p>
+
+      <div class="form-row" style="max-width:160px">
+        <label>Quantity</label>
+        <div class="qty-stepper">
+          <button type="button" id="qtyMinus">−</button>
+          <input id="qtyInput" value="1" inputmode="numeric">
+          <button type="button" id="qtyPlus">+</button>
+        </div>
+      </div>
+
+      <div class="pdp-actions">
+        <button class="btn amber" id="addToCartBtn">Add to cart</button>
+        <button class="btn secondary" id="buyNowBtn">Buy now</button>
+      </div>
+
+      <div class="receipt" style="max-width:320px">
+        <h4>Item Manifest</h4>
+        <div class="line"><span>SKU</span><span id="rSku">—</span></div>
+        <div class="line"><span>Category</span><span id="rCat">—</span></div>
+        <div class="line"><span>Rating</span><span id="rRating">—</span></div>
+        <div class="barcode"></div>
+        <div class="stamp">SCAN TO VERIFY AUTHENTICITY</div>
+      </div>
+
+      <div class="tabs">
+        <button class="active" data-tab="desc">Description</button>
+        <button data-tab="reviews">Reviews</button>
+        <button data-tab="shipping">Shipping</button>
+      </div>
+      <div class="tab-panel active" data-panel="desc" id="fullDesc"></div>
+      <div class="tab-panel" data-panel="reviews">
+        <div id="reviewsList"></div>
+        <div class="panel" style="margin-top:16px">
+          <div class="form-row">
+            <label>Your rating</label>
+            <select id="reviewRating"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select>
+          </div>
+          <div class="form-row">
+            <label>Comment</label>
+            <textarea id="reviewComment" rows="3" placeholder="What did you think?"></textarea>
+          </div>
+          <button class="btn secondary sm" id="submitReview">Submit review</button>
+          <div class="form-error" id="reviewError"></div>
+        </div>
+      </div>
+      <div class="tab-panel" data-panel="shipping">
+        <p class="desc">Standard dispatch is 1–2 business days. Express and international rates are calculated at checkout based on your address and cart weight.</p>
+      </div>
+    </div>
+  </div>
+
+  <section class="section-head"><h2>Related items</h2></section>
+  <div class="grid" id="relatedGrid"></div>
+</main>
+
+<footer class="site"><div class="container"><span>© 2026 Dispatch Commerce Co.</span></div></footer>
+
+<script src="{% static 'js/api.js' %}"></script>
+<script>
+const productId = new URLSearchParams(location.search).get("id");
+let currentProduct = null;
+
+function money2(n){ return money(n); }
+
+async function loadProduct(){
+  if (!productId){
+    qs("#alertSlot").innerHTML = `<div class="alert error">No product id in URL. Go back to the <a href="/">catalog</a>.</div>`;
+    return;
+  }
+  try {
+    const res = await Api.getProduct(productId);
+    const p = res.data || res.product || res;
+    currentProduct = p;
+
+    const images = p.images && p.images.length ? p.images : [p.imageCover || p.image].filter(Boolean);
+    qs("#mainImage").classList.remove("skeleton");
+    qs("#mainImage").innerHTML = images[0] ? `<img src="${images[0]}" alt="${p.name}">` : "🗃️";
+    qs("#thumbRow").innerHTML = images.map((img, i) => `<div class="${i===0?'active':''}" data-src="${img}"><img src="${img}"></div>`).join("");
+    qsa("#thumbRow div").forEach(t => t.addEventListener("click", () => {
+      qs("#mainImage").innerHTML = `<img src="${t.dataset.src}">`;
+      qsa("#thumbRow div").forEach(x => x.classList.remove("active"));
+      t.classList.add("active");
+    }));
+
+    qs("#pCategory").textContent = (p.category && (p.category.name || p.category)) || "General";
+    qs("#pName").textContent = p.name || p.title;
+    qs("#pPrice").textContent = money2(p.price);
+    qs("#pDesc").textContent = (p.description || "").slice(0, 160);
+    qs("#fullDesc").innerHTML = `<p class="desc">${p.description || "No description provided."}</p>`;
+
+    const qty = p.quantity ?? p.stock ?? p.countInStock ?? 0;
+    qs("#pStock").innerHTML = qty <= 0 ? `<span class="badge red">Out of stock</span>` : qty <= 5 ? `<span class="badge amber">Only ${qty} left</span>` : `<span class="badge green">In stock</span>`;
+    if (qty <= 0){ qs("#addToCartBtn").disabled = true; qs("#buyNowBtn").disabled = true; }
+
+    qs("#rSku").textContent = p.sku || (p._id || p.id || "").toString().slice(-8).toUpperCase();
+    qs("#rCat").textContent = (p.category && (p.category.name || p.category)) || "—";
+    qs("#rRating").textContent = `${p.ratingsAverage || p.rating || "—"} (${p.ratingsQuantity || p.numReviews || 0})`;
+
+    document.title = `${p.name || p.title} — Dispatch`;
+    loadReviews();
+    loadRelated(p.category);
+  } catch (e) {
+    qs("#alertSlot").innerHTML = `<div class="alert error">Couldn't load this product: ${e.message}</div>`;
+  }
+}
+
+async function loadReviews(){
+  try {
+    const res = await Api.getReviews(productId);
+    const reviews = res.data || res.reviews || [];
+    qs("#reviewsList").innerHTML = reviews.length ? reviews.map(r => `
+      <div class="review">
+        <div class="stars">${"★".repeat(r.rating || 0)}${"☆".repeat(5-(r.rating||0))}</div>
+        <p>${r.comment || r.review || ""}</p>
+        <div class="meta">${(r.user && (r.user.name)) || "Verified buyer"} · ${new Date(r.createdAt || Date.now()).toLocaleDateString()}</div>
+      </div>`).join("") : `<p class="desc">No reviews yet — be the first.</p>`;
+  } catch (e) { qs("#reviewsList").innerHTML = `<p class="desc">Reviews unavailable.</p>`; }
+}
+
+async function loadRelated(category){
+  try {
+    const res = await Api.getProducts({ category: category?._id || category, limit: 4 });
+    const products = (res.data || res.products || []).filter(p => (p._id||p.id) !== productId).slice(0,4);
+    qs("#relatedGrid").innerHTML = products.map(p => `
+      <a class="card" href="/product/?id=${p._id||p.id}">
+        <div class="thumb">${(p.images&&p.images[0])||p.imageCover ? `<img src="${(p.images&&p.images[0])||p.imageCover}">` : "🗃️"}</div>
+        <div class="body"><h3>${p.name||p.title}</h3><div class="row"><span class="price">${money2(p.price)}</span></div></div>
+      </a>`).join("") || `<p class="desc">No related items found.</p>`;
+  } catch(e){}
+}
+
+qsa(".tabs button").forEach(btn => btn.addEventListener("click", () => {
+  qsa(".tabs button").forEach(b => b.classList.remove("active"));
+  qsa(".tab-panel").forEach(p => p.classList.remove("active"));
+  btn.classList.add("active");
+  qs(`[data-panel="${btn.dataset.tab}"]`).classList.add("active");
+}));
+
+qs("#qtyMinus").addEventListener("click", () => { const i = qs("#qtyInput"); i.value = Math.max(1, Number(i.value)-1); });
+qs("#qtyPlus").addEventListener("click", () => { const i = qs("#qtyInput"); i.value = Number(i.value)+1; });
+
+async function addToCart(redirectToCart){
+  if (!Auth.isLoggedIn()){ toast("Please log in to add items to your cart", "error"); setTimeout(()=>location.href="/login/", 900); return; }
+  try {
+    await Api.addToCart(productId, Number(qs("#qtyInput").value) || 1);
+    toast("Added to cart", "success");
+    refreshHeaderState();
+    if (redirectToCart) location.href = "/cart/";
+  } catch (e) { toast(e.message, "error"); }
+}
+qs("#addToCartBtn").addEventListener("click", () => addToCart(false));
+qs("#buyNowBtn").addEventListener("click", () => addToCart(true));
+
+qs("#submitReview").addEventListener("click", async () => {
+  if (!Auth.isLoggedIn()){ qs("#reviewError").textContent = "Log in to leave a review."; return; }
+  try {
+    await Api.postReview(productId, { rating: Number(qs("#reviewRating").value), comment: qs("#reviewComment").value });
+    qs("#reviewComment").value = "";
+    toast("Review submitted", "success");
+    loadReviews();
+  } catch (e) { qs("#reviewError").textContent = e.message; }
+});
+
+loadProduct();
+</script>
+</body>
+</html>
+

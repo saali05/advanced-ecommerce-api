@@ -1,0 +1,110 @@
+
+
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your Profile — Dispatch</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+
+<header class="site">
+  <div class="container">
+    <a class="brand" href="/"><span class="mark"></span><div><strong>DISPATCH</strong><br><small>ADVANCED COMMERCE</small></div></a>
+    <nav class="main"><a href="/">Catalog</a><a href="/cart/">Cart</a><a href="/orders/">Orders</a></nav>
+    <div class="header-actions">
+      <a class="icon-link" href="/cart/">🧾 Cart <span class="cart-count" data-cart-count>0</span></a>
+      <span data-auth-slot></span>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <div class="profile-layout">
+    <nav class="side-nav">
+      <a href="/profile/" aria-current="page">Profile</a>
+      <a href="/orders/">Order history</a>
+      <a href="/cart/">Cart</a>
+    </nav>
+    <div>
+      <div class="section-head"><h2>Account details</h2></div>
+      <div id="alertSlot"></div>
+
+      <form id="profileForm" class="panel">
+        <div class="form-grid">
+          <div class="form-row"><label>Full name</label><input id="name" required></div>
+          <div class="form-row"><label>Email</label><input id="email" type="email" required></div>
+        </div>
+        <div class="form-row"><label>Phone</label><input id="phone"></div>
+        <div class="form-error" id="profileError"></div>
+        <button class="btn amber" type="submit">Save changes</button>
+      </form>
+
+      <div class="panel">
+        <h3 style="font-family:var(--mono);font-size:14px;margin-top:0">Change password</h3>
+        <div class="form-grid">
+          <div class="form-row"><label>Current password</label><input id="curPass" type="password"></div>
+          <div class="form-row"><label>New password</label><input id="newPass" type="password"></div>
+        </div>
+        <button class="btn secondary" id="changePassBtn" type="button">Update password</button>
+      </div>
+
+      <div class="panel">
+        <h3 style="font-family:var(--mono);font-size:14px;margin-top:0;color:var(--stamp-red)">Danger zone</h3>
+        <p class="form-note">Signing out will end your session on this device.</p>
+        <button class="btn danger" id="logoutBtn" type="button">Log out</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="site"><div class="container"><span>© 2026 Dispatch Commerce Co.</span></div></footer>
+
+<script src="{% static 'js/api.js' %}"></script>
+<script>
+async function loadProfile(){
+  if (!Auth.isLoggedIn()){
+    qs("#alertSlot").innerHTML = `<div class="alert info">Please <a href="/login/" style="border-bottom:1.5px solid var(--ink)">log in</a> to view your profile.</div>`;
+    qs("#profileForm").style.display = "none";
+    return;
+  }
+  try {
+    const res = await Api.me();
+    const user = res.data || res.user || res;
+    Auth.setUser(user);
+    qs("#name").value = user.name || "";
+    qs("#email").value = user.email || "";
+    qs("#phone").value = user.phone || "";
+  } catch (e) {
+    const cached = Auth.getUser();
+    if (cached){
+      qs("#name").value = cached.name || "";
+      qs("#email").value = cached.email || "";
+    } else {
+      qs("#alertSlot").innerHTML = `<div class="alert error">Couldn't load your profile: ${e.message}</div>`;
+    }
+  }
+}
+
+qs("#profileForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  qs("#profileError").textContent = "";
+  toast("Note: wire this form's submit to a PUT /users/me endpoint on your backend.", "info", 4000);
+});
+
+qs("#changePassBtn").addEventListener("click", () => {
+  toast("Note: wire this to your backend's change-password endpoint.", "info", 4000);
+});
+
+qs("#logoutBtn").addEventListener("click", () => Auth.logout());
+
+loadProfile();
+</script>
+</body>
+</html>
+    
